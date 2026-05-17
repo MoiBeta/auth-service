@@ -8,6 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { StringValue } from 'ms';
+import { AuthResponseDto } from './dto/auth.response.dto';
+import { UserResponseDto } from './dto/user.response.dto';
 
 @Injectable()
 export class AuthService {
@@ -38,9 +40,12 @@ export class AuthService {
 
     const tokens = await this.getTokens(user.id, user.email);
 
-    await this.updateRtHash(user.id, tokens.refresh_token);
+    await this.updateRtHash(user.id, tokens.refreshToken);
 
-    return tokens;
+    return {
+      user: this.buildUserResponse(user),
+      tokens,
+    } as AuthResponseDto;
   }
 
   async login(email: string, password: string) {
@@ -59,9 +64,12 @@ export class AuthService {
 
     const tokens = await this.getTokens(user.id, user.email);
 
-    await this.updateRtHash(user.id, tokens.refresh_token);
+    await this.updateRtHash(user.id, tokens.refreshToken);
 
-    return tokens;
+    return {
+      user: this.buildUserResponse(user),
+      tokens,
+    } as AuthResponseDto;
   }
 
   async getMe(userId: string) {
@@ -98,9 +106,12 @@ export class AuthService {
 
     const tokens = await this.getTokens(user.id, user.email);
 
-    await this.updateRtHash(user.id, tokens.refresh_token);
+    await this.updateRtHash(user.id, tokens.refreshToken);
 
-    return tokens;
+    return {
+      user: this.buildUserResponse(user),
+      tokens,
+    } as AuthResponseDto;
   }
 
   async logout(userId: string) {
@@ -137,8 +148,17 @@ export class AuthService {
     ]);
 
     return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    };
+  }
+
+  private buildUserResponse(user: { id: string; email: string; name: string; role: string; }): UserResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.name,
+      role: user.role,
     };
   }
 
