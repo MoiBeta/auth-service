@@ -2,7 +2,7 @@ import { Controller, Post, Body, Get, Req, UseGuards, HttpCode, HttpStatus } fro
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthGuard } from '@nestjs/passport';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { RefreshTokenUser } from './interfaces/refresh-token-user.interface';
@@ -29,7 +29,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   @Get('me')
   me(@Req() req: Request & { user: AuthenticatedUser }) {
     return this.authService.getMe(req.user.userId);
@@ -44,5 +44,14 @@ export class AuthController {
       req.user.userId,
       req.user.refreshToken,
     );
+  }
+
+  @ApiOperation({ summary: 'Cerrar sesión (invalida el refresh token)' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('logout')
+  logout(@Req() req: Request & { user: AuthenticatedUser }) {
+    return this.authService.logout(req.user.userId);
   }
 }

@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { createHash, timingSafeEqual } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
@@ -98,9 +99,7 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    const rtMatches = await bcrypt.compare(refreshToken, user.hashedRt);
-
-    if (!rtMatches) {
+    if (!this.refreshTokenMatches(refreshToken, user.hashedRt)) {
       throw new UnauthorizedException();
     }
 
@@ -162,8 +161,22 @@ export class AuthService {
     };
   }
 
+  // bcrypt only uses the first 72 bytes, which are identical for every JWT of
+  // the same user, so refresh tokens are hashed with SHA-256 instead.
+  private hashRefreshToken(refreshToken: string) {
+    return createHash('sha256').update(refreshToken).digest('hex');
+  }
+
+  private refreshTokenMatches(refreshToken: string, storedHash: string) {
+    const candidate = Buffer.from(this.hashRefreshToken(refreshToken));
+    const stored = Buffer.from(storedHash);
+    return (
+      candidate.length === stored.length && timingSafeEqual(candidate, stored)
+    );
+  }
+
   private async updateRtHash(userId: string, refreshToken: string) {
-    const hash = await bcrypt.hash(refreshToken, 10);
+    const hash = this.hashRefreshToken(refreshToken);
 
     await this.prisma.user.update({
       where: { id: userId },
