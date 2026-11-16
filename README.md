@@ -24,7 +24,7 @@ flowchart LR
     habit --> db
 ```
 
-Both services run as Docker containers on an AWS Lightsail instance, with a managed PostgreSQL on Supabase.
+Both services run as Docker containers on an AWS Lightsail instance, with a managed PostgreSQL on Supabase. A Caddy reverse proxy is the only entry point: it terminates HTTPS and forwards each subdomain to its service, whose ports are not exposed to the internet.
 
 ## Tech stack
 
@@ -32,7 +32,7 @@ NestJS 11, TypeScript, Prisma 6, PostgreSQL, Passport (JWT), bcrypt, Swagger, Je
 
 ## API
 
-Interactive documentation is served at `/docs` (Swagger UI).
+Interactive documentation (Swagger UI) is live at [auth.selfanvil.app/docs](https://auth.selfanvil.app/docs).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -104,6 +104,5 @@ npm test
 
 ## Roadmap
 
-- HTTPS behind a domain, with the service ports closed to the internet.
 - Rate limiting on the login and register endpoints.
 - Fix the existing lint errors and enforce lint in CI.
