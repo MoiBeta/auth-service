@@ -1,98 +1,109 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# auth-service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The accounts and sessions service behind [SelfAnvil](https://github.com/MoiBeta/Auto-Admin-App), a tasks and habits app. It registers users, logs them in and issues the JWTs that the rest of the system trusts.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+| Repository | What it is |
+|---|---|
+| [Auto-Admin-App](https://github.com/MoiBeta/Auto-Admin-App) | Flutter client for Android |
+| **auth-service** (this one) | NestJS service for accounts and JWT sessions |
+| [habit-service](https://github.com/MoiBeta/habit-service) | NestJS service for habits, subtasks and reminders |
 
-## Description
+## Architecture
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+```mermaid
+flowchart LR
+    app["SelfAnvil<br/>(Flutter)"]
+    auth["auth-service"]
+    habit["habit-service"]
+    db[("PostgreSQL<br/>(Supabase)")]
 
-## Project setup
-
-```bash
-$ npm install
+    app -- "REST + JWT" --> auth
+    app -- "REST + JWT" --> habit
+    habit -- "internal API key" --> auth
+    auth --> db
+    habit --> db
 ```
 
-## Compile and run the project
+Both services run as Docker containers on an AWS Lightsail instance, with a managed PostgreSQL on Supabase.
+
+## Tech stack
+
+NestJS 11, TypeScript, Prisma 6, PostgreSQL, Passport (JWT), bcrypt, Swagger, Jest and Docker.
+
+## API
+
+Interactive documentation is served at `/docs` (Swagger UI).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/` | None | Health check |
+| `POST` | `/auth/register` | None | Creates an account and returns the user with a token pair |
+| `POST` | `/auth/login` | None | Returns the user with a token pair |
+| `GET` | `/auth/me` | Access token | Returns the current user |
+| `POST` | `/auth/refresh` | Refresh token | Returns a new token pair and invalidates the old refresh token |
+| `POST` | `/auth/logout` | Access token | Invalidates the stored refresh token |
+| `GET` | `/users` | Access token, `ADMIN` role | Lists users |
+| `GET` | `/users/:id` | Internal API key | Lets other services check that a user exists |
+
+## Design decisions
+
+- **Short-lived access tokens with refresh token rotation.** Access tokens expire quickly (15 minutes by default). Each refresh returns a new pair and replaces the stored refresh token, so a refresh token can only be used once.
+- **Refresh tokens are stored hashed, with SHA-256 and not bcrypt.** bcrypt only reads the first 72 bytes of its input, and those bytes are identical in every JWT issued to the same user, so bcrypt would accept any of them. The comparison uses `timingSafeEqual`.
+- **Passwords are hashed with bcrypt**, and a failed login returns the same error whether the email exists or not.
+- **Service-to-service calls use a shared key.** `habit-service` calls `GET /users/:id` with an `x-internal-api-key` header, compared in constant time. That endpoint does not accept user tokens.
+- **Strict input validation.** Requests with unknown fields are rejected.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in the values.
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Pooled PostgreSQL connection, used at runtime |
+| `DIRECT_URL` | Direct PostgreSQL connection, used for migrations |
+| `JWT_SECRET` | Signs access tokens. Must be the same in `habit-service` |
+| `JWT_EXPIRES_IN` | Access token lifetime, for example `15m` |
+| `JWT_REFRESH_SECRET` | Signs refresh tokens |
+| `JWT_REFRESH_EXPIRES_IN` | Refresh token lifetime, for example `7d` |
+| `INTERNAL_API_KEY` | Shared secret for service-to-service calls. Must be the same in `habit-service` |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
+| `PORT` | Port to listen on (defaults to 3000) |
+
+## Running locally
+
+Requirements: Node.js 20 and a PostgreSQL database.
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm ci
+cp .env.example .env
+npx prisma migrate deploy
+npm run start:dev
 ```
 
-## Run tests
+With Docker:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+docker build -t auth-service .
+docker run --env-file .env -p 3001:3000 auth-service
 ```
 
-## Deployment
+The container applies pending migrations before it starts.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Tests
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm test
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## CI/CD
 
-## Resources
+[.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) runs on GitHub Actions:
 
-Check out a few resources that may come in handy when working with NestJS:
+1. **Every pull request and every push to `main`:** install, generate the Prisma client, build and run the tests.
+2. **Pushes to `main` only:** build the Docker image, publish it to GitHub Container Registry, then connect to the server over SSH and restart the service with the new image.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Roadmap
 
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- HTTPS behind a domain, with the service ports closed to the internet.
+- Rate limiting on the login and register endpoints.
+- Fix the existing lint errors and enforce lint in CI.
