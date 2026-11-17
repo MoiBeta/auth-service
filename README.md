@@ -51,6 +51,7 @@ Interactive documentation (Swagger UI) is live at [auth.selfanvil.app/docs](http
 - **Refresh tokens are stored hashed, with SHA-256 and not bcrypt.** bcrypt only reads the first 72 bytes of its input, and those bytes are identical in every JWT issued to the same user, so bcrypt would accept any of them. The comparison uses `timingSafeEqual`.
 - **Passwords are hashed with bcrypt**, and a failed login returns the same error whether the email exists or not.
 - **Service-to-service calls use a shared key.** `habit-service` calls `GET /users/:id` with an `x-internal-api-key` header, compared in constant time. That endpoint does not accept user tokens.
+- **Rate limiting per client IP.** Login, register and refresh have small budgets (10, 5 and 30 requests per minute); everything else shares a general one. The client IP is read from `X-Forwarded-For` only when the request comes through the reverse proxy, so the header cannot be forged to dodge the limits. The internal endpoint and the health check are exempt.
 - **Strict input validation.** Requests with unknown fields are rejected.
 
 ## Environment variables
@@ -104,5 +105,4 @@ npm test
 
 ## Roadmap
 
-- Rate limiting on the login and register endpoints.
 - Fix the existing lint errors and enforce lint in CI.

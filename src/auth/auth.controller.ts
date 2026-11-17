@@ -8,6 +8,8 @@ import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { RefreshTokenUser } from './interfaces/refresh-token-user.interface';
 import { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { RATE_LIMITS } from '../rate-limit';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -15,12 +17,14 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @ApiOperation({ summary: 'Registrar usuario' })
+  @Throttle({ default: RATE_LIMITS.register })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto.name, dto.email, dto.password);
   }
 
   @ApiOperation({ summary: 'Iniciar sesión' })
+  @Throttle({ default: RATE_LIMITS.login })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   login(@Body() dto: LoginDto) {
@@ -37,6 +41,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Actualizar tokens de autenticación' })
   @ApiBearerAuth()
+  @Throttle({ default: RATE_LIMITS.refresh })
   @UseGuards(RefreshTokenGuard)
   @Post('refresh')
   refresh(@Req() req: Request & { user: RefreshTokenUser }) {

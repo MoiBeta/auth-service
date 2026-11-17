@@ -2,9 +2,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { TRUSTED_PROXIES } from './rate-limit';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Needed to rate limit by the real client IP behind the reverse proxy.
+  app.set('trust proxy', TRUSTED_PROXIES);
 
   app.useGlobalPipes(
     new ValidationPipe({
