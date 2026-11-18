@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { RefreshTokenStrategy } from './strategies/refresh.strategy';
+import { GoogleIdTokenVerifier } from './google-id-token.verifier';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RefreshTokenStrategy } from './strategies/refresh.strategy';
     RefreshTokenStrategy,
     JwtAuthGuard,
     RefreshTokenGuard,
+    GoogleIdTokenVerifier,
   ],
   exports: [JwtAuthGuard, RefreshTokenGuard],
 })

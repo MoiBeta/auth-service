@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, Req, UseGuards, HttpCode, HttpStatus } fro
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
@@ -29,6 +30,14 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
+  }
+
+  @ApiOperation({ summary: 'Iniciar sesión o registrarse con Google' })
+  @Throttle({ default: RATE_LIMITS.login })
+  @HttpCode(HttpStatus.OK)
+  @Post('google')
+  loginWithGoogle(@Body() dto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(dto.idToken);
   }
 
   @ApiOperation({ summary: 'Obtener información del usuario autenticado' })

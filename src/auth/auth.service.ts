@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { StringValue } from 'ms';
 import { AuthResponseDto } from './dto/auth.response.dto';
 import { UserResponseDto } from './dto/user.response.dto';
+import { GoogleIdTokenVerifier } from './google-id-token.verifier';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +19,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private config: ConfigService,
+    private googleVerifier: GoogleIdTokenVerifier,
   ) {}
 
   async register(name: string, email: string, password: string) {
@@ -54,13 +56,61 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user) {
+    // Accounts created with Google have no password.
+    if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const tokens = await this.getTokens(user.id, user.email);
+
+    await this.updateRtHash(user.id, tokens.refreshToken);
+
+    return {
+      user: this.buildUserResponse(user),
+      tokens,
+    } as AuthResponseDto;
+  }
+
+  /**
+   * Signs in with a Google ID token, creating the account on first use.
+   *
+   * An existing account with the same email is linked to the Google account.
+   * Registration does not verify emails, so anyone could have created that
+   * account with someone else's address and a password of their own. Google
+   * has verified that the email belongs to the person signing in now, so on
+   * linking the password and the open session are removed: whoever set them
+   * loses access, and the owner signs in with Google from then on.
+   */
+  async loginWithGoogle(idToken: string) {
+    const { googleId, email, name } = await this.googleVerifier.verify(idToken);
+
+    let user = await this.prisma.user.findUnique({ where: { googleId } });
+
+    if (!user) {
+      const existing = await this.prisma.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+      });
+
+      if (existing?.googleId) {
+        // The email now belongs to a different Google account.
+        throw new ConflictException(
+          'This email is linked to another Google account',
+        );
+      }
+
+      user = existing
+        ? await this.prisma.user.update({
+            where: { id: existing.id },
+            data: { googleId, password: null, hashedRt: null },
+          })
+        : await this.prisma.user.create({
+            data: { googleId, email, name },
+          });
     }
 
     const tokens = await this.getTokens(user.id, user.email);

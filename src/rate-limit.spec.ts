@@ -32,6 +32,7 @@ describe('Rate limiting', () => {
           useValue: {
             login: jest.fn().mockResolvedValue({ ok: true }),
             register: jest.fn().mockResolvedValue({ ok: true }),
+            loginWithGoogle: jest.fn().mockResolvedValue({ ok: true }),
           },
         },
         {
@@ -81,6 +82,16 @@ describe('Rate limiting', () => {
       expect((await register()).status).toBe(201);
     }
     expect((await register()).status).toBe(429);
+  });
+
+  it('blocks Google sign-in attempts over the login limit', async () => {
+    const google = () =>
+      request(app.getHttpServer()).post('/auth/google').send({});
+
+    for (let i = 0; i < RATE_LIMITS.login.limit; i++) {
+      expect((await google()).status).toBe(200);
+    }
+    expect((await google()).status).toBe(429);
   });
 
   it('keeps a separate budget for each endpoint', async () => {

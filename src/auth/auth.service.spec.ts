@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoogleIdTokenVerifier } from './google-id-token.verifier';
 
 describe('AuthService refresh token rotation', () => {
   let service: AuthService;
@@ -43,6 +44,7 @@ describe('AuthService refresh token rotation', () => {
         JwtService,
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: config },
+        { provide: GoogleIdTokenVerifier, useValue: {} },
       ],
     }).compile();
 

@@ -29,7 +29,7 @@ Both services run as Docker containers on an AWS Lightsail instance, with a mana
 
 ## Tech stack
 
-NestJS 11, TypeScript, Prisma 6, PostgreSQL, Passport (JWT), bcrypt, Swagger, Jest and Docker.
+NestJS 11, TypeScript, Prisma 6, PostgreSQL, Passport (JWT), bcrypt, google-auth-library, Swagger, Jest and Docker.
 
 ## API
 
@@ -40,6 +40,7 @@ Interactive documentation (Swagger UI) is live at [auth.selfanvil.app/docs](http
 | `GET` | `/` | None | Health check |
 | `POST` | `/auth/register` | None | Creates an account and returns the user with a token pair |
 | `POST` | `/auth/login` | None | Returns the user with a token pair |
+| `POST` | `/auth/google` | Google ID token | Signs in with Google, creating the account on first use |
 | `GET` | `/auth/me` | Access token | Returns the current user |
 | `POST` | `/auth/refresh` | Refresh token | Returns a new token pair and invalidates the old refresh token |
 | `POST` | `/auth/logout` | Access token | Invalidates the stored refresh token |
@@ -50,6 +51,8 @@ Interactive documentation (Swagger UI) is live at [auth.selfanvil.app/docs](http
 
 - **Short-lived access tokens with refresh token rotation.** Access tokens expire quickly (15 minutes by default). Each refresh returns a new pair and replaces the stored refresh token, so a refresh token can only be used once.
 - **Refresh tokens are stored hashed, with SHA-256 and not bcrypt.** bcrypt only reads the first 72 bytes of its input, and those bytes are identical in every JWT issued to the same user, so bcrypt would accept any of them. The comparison uses `timingSafeEqual`.
+- **Google Sign-In without Firebase Auth.** The app gets an ID token from Google and sends it to `POST /auth/google`. The service verifies its signature, expiry and audience with Google's library and only accepts emails that Google has verified. From then on the session works exactly like a password login, with this service's own JWTs.
+- **Account linking that resists pre-registration.** Signing in with Google links an existing account with the same email. Registration does not verify emails, so someone could have registered the victim's address first; on linking, the password and any open session are removed, so only the owner of the Google account keeps access.
 - **Passwords are hashed with bcrypt**, and a failed login returns the same error whether the email exists or not.
 - **Service-to-service calls use a shared key.** `habit-service` calls `GET /users/:id` with an `x-internal-api-key` header, compared in constant time. That endpoint does not accept user tokens.
 - **Rate limiting per client IP.** Login, register and refresh have small budgets (10, 5 and 30 requests per minute); everything else shares a general one. The client IP is read from `X-Forwarded-For` only when the request comes through the reverse proxy, so the header cannot be forged to dodge the limits. The internal endpoint and the health check are exempt.
@@ -68,6 +71,7 @@ Copy `.env.example` to `.env` and fill in the values.
 | `JWT_REFRESH_SECRET` | Signs refresh tokens |
 | `JWT_REFRESH_EXPIRES_IN` | Refresh token lifetime, for example `7d` |
 | `INTERNAL_API_KEY` | Shared secret for service-to-service calls. Must be the same in `habit-service` |
+| `GOOGLE_CLIENT_ID` | OAuth web client ID, the expected audience of Google ID tokens |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins |
 | `PORT` | Port to listen on (defaults to 3000) |
 
