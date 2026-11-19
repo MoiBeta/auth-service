@@ -1,10 +1,10 @@
 # auth-service
 
-The accounts and sessions service behind [SelfAnvil](https://github.com/MoiBeta/Auto-Admin-App), a tasks and habits app. It registers users, logs them in and issues the JWTs that the rest of the system trusts.
+The accounts and sessions service behind [SelfAnvil](https://github.com/MoiBeta/SelfAnvil), a tasks and habits app. It registers users, logs them in and issues the JWTs that the rest of the system trusts.
 
 | Repository | What it is |
 |---|---|
-| [Auto-Admin-App](https://github.com/MoiBeta/Auto-Admin-App) | Flutter client for Android |
+| [SelfAnvil](https://github.com/MoiBeta/SelfAnvil) | Flutter client for Android |
 | **auth-service** (this one) | NestJS service for accounts and JWT sessions |
 | [habit-service](https://github.com/MoiBeta/habit-service) | NestJS service for habits, subtasks and reminders |
 | [selfanvil-infra](https://github.com/MoiBeta/selfanvil-infra) | Docker Compose, reverse proxy and deployment |
