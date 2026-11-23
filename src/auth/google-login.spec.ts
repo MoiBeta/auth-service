@@ -1,189 +1,114 @@
-import { Test } from '@nestjs/testing';
 import {
   ConflictException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
-import { AuthService } from './auth.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { GoogleIdTokenVerifier } from './google-id-token.verifier';
 import {
-  GoogleIdTokenVerifier,
-  GoogleIdentity,
-} from './google-id-token.verifier';
-
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  password: string | null;
-  googleId: string | null;
-  role: string;
-  hashedRt: string | null;
-};
-
-/** In-memory stand-in for the parts of Prisma that AuthService uses. */
-function fakePrisma(users: User[]) {
-  const matches = (u: User, where: Record<string, any>) =>
-    Object.entries(where).every(([key, value]) =>
-      typeof value === 'object' && value !== null
-        ? String(u[key as keyof User]).toLowerCase() ===
-          String(value.equals).toLowerCase()
-        : u[key as keyof User] === value,
-    );
-
-  return {
-    user: {
-      findUnique: jest.fn(({ where }) =>
-        Promise.resolve(users.find((u) => matches(u, where)) ?? null),
-      ),
-      findFirst: jest.fn(({ where }) =>
-        Promise.resolve(users.find((u) => matches(u, where)) ?? null),
-      ),
-      create: jest.fn(({ data }) => {
-        const user: User = {
-          id: `user-${users.length + 1}`,
-          name: '',
-          password: null,
-          googleId: null,
-          role: 'USER',
-          hashedRt: null,
-          ...data,
-        };
-        users.push(user);
-        return Promise.resolve(user);
-      }),
-      update: jest.fn(({ where, data }) => {
-        const user = users.find((u) => matches(u, where))!;
-        Object.assign(user, data);
-        return Promise.resolve(user);
-      }),
-    },
-  };
-}
-
-const config = {
-  get: (key: string) =>
-    (({ GOOGLE_CLIENT_ID: 'web-client-id' }) as Record<string, string>)[key],
-  getOrThrow: (key: string) =>
-    ({
-      JWT_SECRET: 'access-secret',
-      JWT_EXPIRES_IN: '15m',
-      JWT_REFRESH_SECRET: 'refresh-secret',
-      JWT_REFRESH_EXPIRES_IN: '7d',
-    })[key],
-};
+  createAuthTestKit,
+  fakeUser,
+  flushBackground,
+} from './testing/auth-test-kit';
 
 describe('AuthService.loginWithGoogle', () => {
-  const identity: GoogleIdentity = {
-    googleId: 'google-123',
-    email: 'ana@gmail.com',
-    name: 'Ana',
-  };
-
-  let users: User[];
-  let service: AuthService;
+  let kit: Awaited<ReturnType<typeof createAuthTestKit>>;
 
   beforeEach(async () => {
-    users = [];
-    const module = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        JwtService,
-        { provide: PrismaService, useValue: fakePrisma(users) },
-        { provide: ConfigService, useValue: config },
-        {
-          provide: GoogleIdTokenVerifier,
-          useValue: { verify: jest.fn().mockResolvedValue(identity) },
-        },
-      ],
-    }).compile();
-    service = module.get(AuthService);
+    kit = await createAuthTestKit();
   });
 
-  it('creates an account on first sign-in', async () => {
-    const res = await service.loginWithGoogle('token');
+  it('creates an account on first sign-in, with the email verified', async () => {
+    const res = await kit.service.loginWithGoogle('token');
 
-    expect(users).toHaveLength(1);
-    expect(users[0]).toMatchObject({
+    expect(kit.users).toHaveLength(1);
+    expect(kit.users[0]).toMatchObject({
       email: 'ana@gmail.com',
       name: 'Ana',
       googleId: 'google-123',
       password: null,
+      emailVerified: true,
     });
-    expect(res.user.email).toBe('ana@gmail.com');
+    expect(res.user).toMatchObject({
+      email: 'ana@gmail.com',
+      isEmailConfirmed: true,
+      hasPassword: false,
+    });
     expect(res.tokens.accessToken).toBeDefined();
-    expect(users[0].hashedRt).not.toBeNull();
+    expect(kit.users[0].hashedRt).not.toBeNull();
   });
 
   it('signs in to the same account next time', async () => {
-    await service.loginWithGoogle('token');
-    const res = await service.loginWithGoogle('token');
+    await kit.service.loginWithGoogle('token');
+    const res = await kit.service.loginWithGoogle('token');
 
-    expect(users).toHaveLength(1);
-    expect(res.user.id).toBe(users[0].id);
+    expect(kit.users).toHaveLength(1);
+    expect(res.user.id).toBe(kit.users[0].id);
   });
 
-  it('links an account registered with the same email, in any case', async () => {
-    users.push({
-      id: 'existing',
-      name: 'Ana P',
-      email: 'Ana@Gmail.com',
-      password: 'bcrypt-hash',
-      googleId: null,
-      role: 'USER',
-      hashedRt: 'old-session',
-    });
-
-    const res = await service.loginWithGoogle('token');
-
-    expect(users).toHaveLength(1);
-    expect(res.user.id).toBe('existing');
-    expect(users[0].googleId).toBe('google-123');
-  });
-
-  it('removes the password and the open session when linking', async () => {
-    users.push({
-      id: 'existing',
-      name: '',
-      email: 'ana@gmail.com',
-      password: 'bcrypt-hash',
-      googleId: null,
-      role: 'USER',
-      hashedRt: 'old-session',
-    });
-
-    await service.loginWithGoogle('token');
-
-    expect(users[0].password).toBeNull();
-    expect(users[0].hashedRt).not.toBe('old-session');
-    await expect(service.login('ana@gmail.com', 'anything')).rejects.toThrow(
-      UnauthorizedException,
+  it('links a verified account and keeps its password', async () => {
+    kit.users.push(
+      fakeUser({
+        name: 'Ana P',
+        emailVerified: true,
+        password: await bcrypt.hash('secret1', 4),
+      }),
     );
+
+    const res = await kit.service.loginWithGoogle('token');
+
+    expect(kit.users).toHaveLength(1);
+    expect(res.user).toMatchObject({ id: 'existing', hasPassword: true });
+    expect(kit.users[0].googleId).toBe('google-123');
+    expect(kit.users[0].credentialsVersion).toBe(0);
+    // Both methods keep working.
+    await expect(
+      kit.service.login('ana@gmail.com', 'secret1'),
+    ).resolves.toBeDefined();
+    await expect(kit.service.loginWithGoogle('token')).resolves.toBeDefined();
+  });
+
+  it('removes the password and the open session of an unverified account', async () => {
+    kit.users.push(
+      fakeUser({
+        password: await bcrypt.hash('attacker', 4),
+        hashedRt: 'old-session',
+      }),
+    );
+    await kit.service.requestPasswordReset('ana@gmail.com');
+    await flushBackground();
+    expect(kit.emailCodes).toHaveLength(1);
+
+    const res = await kit.service.loginWithGoogle('token');
+
+    expect(kit.users[0]).toMatchObject({
+      password: null,
+      emailVerified: true,
+      credentialsVersion: 1,
+    });
+    // Pending codes no longer apply.
+    expect(kit.emailCodes).toHaveLength(0);
+    expect(kit.users[0].hashedRt).not.toBe('old-session');
+    expect(kit.cvOf(res.tokens.accessToken)).toBe(1);
+    await expect(
+      kit.service.login('ana@gmail.com', 'attacker'),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects an email linked to another Google account', async () => {
-    users.push({
-      id: 'existing',
-      name: '',
-      email: 'ana@gmail.com',
-      password: null,
-      googleId: 'google-other',
-      role: 'USER',
-      hashedRt: null,
-    });
+    kit.users.push(fakeUser({ googleId: 'google-other', emailVerified: true }));
 
-    await expect(service.loginWithGoogle('token')).rejects.toThrow(
+    await expect(kit.service.loginWithGoogle('token')).rejects.toThrow(
       ConflictException,
     );
   });
 
   it('rejects a password login for an account without password', async () => {
-    await service.loginWithGoogle('token');
+    await kit.service.loginWithGoogle('token');
 
-    await expect(service.login('ana@gmail.com', '')).rejects.toThrow(
+    await expect(kit.service.login('ana@gmail.com', '')).rejects.toThrow(
       UnauthorizedException,
     );
   });

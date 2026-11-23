@@ -3,6 +3,10 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
@@ -46,6 +50,70 @@ export class AuthController {
   @Get('me')
   me(@Req() req: Request & { user: AuthenticatedUser }) {
     return this.authService.getMe(req.user.userId);
+  }
+
+  @ApiOperation({ summary: 'Verificar el correo con el código enviado' })
+  @ApiBearerAuth()
+  @Throttle({ default: RATE_LIMITS.emailCode })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('email/verify')
+  verifyEmail(
+    @Req() req: Request & { user: AuthenticatedUser },
+    @Body() dto: VerifyEmailDto,
+  ) {
+    return this.authService.verifyEmail(req.user.userId, dto.code);
+  }
+
+  @ApiOperation({ summary: 'Enviar un nuevo código de verificación' })
+  @ApiBearerAuth()
+  @Throttle({ default: RATE_LIMITS.emailCode })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('email/resend')
+  resendEmailCode(@Req() req: Request & { user: AuthenticatedUser }) {
+    return this.authService.resendEmailCode(req.user.userId);
+  }
+
+  @ApiOperation({
+    summary: 'Añadir contraseña a una cuenta que no tiene (creada con Google)',
+  })
+  @ApiBearerAuth()
+  @Throttle({ default: RATE_LIMITS.login })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('password')
+  setPassword(
+    @Req() req: Request & { user: AuthenticatedUser },
+    @Body() dto: SetPasswordDto,
+  ) {
+    return this.authService.setPassword(
+      req.user.userId,
+      req.user.credentialsVersion,
+      dto.password,
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Enviar un código para restablecer la contraseña',
+    description:
+      'Responde lo mismo exista o no una cuenta con ese correo, para no revelarlo.',
+  })
+  @Throttle({ default: RATE_LIMITS.emailCode })
+  @HttpCode(HttpStatus.OK)
+  @Post('password/forgot')
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @ApiOperation({
+    summary: 'Restablecer la contraseña con el código e iniciar sesión',
+  })
+  @Throttle({ default: RATE_LIMITS.login })
+  @HttpCode(HttpStatus.OK)
+  @Post('password/reset')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.code, dto.password);
   }
 
   @ApiOperation({ summary: 'Actualizar tokens de autenticación' })

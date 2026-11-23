@@ -11,6 +11,7 @@ export const RATE_LIMITS = {
   login: { limit: 10, ttl: minutes(1) },
   register: { limit: 5, ttl: minutes(1) },
   refresh: { limit: 30, ttl: minutes(1) },
+  emailCode: { limit: 10, ttl: minutes(1) },
 } as const;
 
 export const throttlerOptions: ThrottlerModuleOptions = {
