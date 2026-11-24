@@ -14,15 +14,47 @@ enum Role {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String   @default("")
-  email     String   @unique
+  id                 String   @id @default(uuid())
+  name               String   @default("")
+  // Always stored lowercased (enforced by a CHECK constraint).
+  email              String   @unique
+  // True once the user proved they own the email: with a code sent to it, or
+  // by signing in with Google.
+  emailVerified      Boolean  @default(false)
   // Null for accounts that only sign in with Google.
-  password  String?
+  password           String?
   // Google account ID (the "sub" claim of its ID tokens).
-  googleId  String?  @unique
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
+  googleId           String?  @unique
+  role               Role     @default(USER)
+  // Bumped when the account changes hands (an unverified password is removed
+  // on linking Google). Tokens carry it, so sensitive endpoints can reject
+  // tokens issued before the change.
+  credentialsVersion Int      @default(0)
+  createdAt          DateTime @default(now())
 
-  hashedRt  String?
+  hashedRt String?
+
+  emailCodes EmailCode[]
+}
+
+enum EmailCodePurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+// One-time codes sent by email. Only the latest of each purpose is valid;
+// the earlier ones are kept for a day to cap how many are sent.
+model EmailCode {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   EmailCodePurpose
+  // SHA-256 of the code.
+  codeHash  String
+  expiresAt DateTime
+  // Failed guesses made against it.
+  attempts  Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, purpose, createdAt])
 }

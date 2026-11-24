@@ -10,6 +10,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 import { RefreshTokenStrategy } from './strategies/refresh.strategy';
 import { GoogleIdTokenVerifier } from './google-id-token.verifier';
+import { MailService } from '../mail/mail.service';
+import { EmailCodeService } from './email-code.service';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { GoogleIdTokenVerifier } from './google-id-token.verifier';
     JwtAuthGuard,
     RefreshTokenGuard,
     GoogleIdTokenVerifier,
+    MailService,
+    EmailCodeService,
   ],
   exports: [JwtAuthGuard, RefreshTokenGuard],
 })

@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleIdTokenVerifier } from './google-id-token.verifier';
+import { MailService } from '../mail/mail.service';
+import { EmailCodeService } from './email-code.service';
 
 describe('AuthService refresh token rotation', () => {
   let service: AuthService;
@@ -14,6 +16,8 @@ describe('AuthService refresh token rotation', () => {
     name: 'User',
     role: 'USER',
     password: 'x',
+    emailVerified: true,
+    credentialsVersion: 0,
     hashedRt: null as string | null,
   };
 
@@ -45,6 +49,8 @@ describe('AuthService refresh token rotation', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: config },
         { provide: GoogleIdTokenVerifier, useValue: {} },
+        { provide: MailService, useValue: {} },
+        { provide: EmailCodeService, useValue: {} },
       ],
     }).compile();
 
